@@ -1,0 +1,26 @@
+{
+  "name": "browser-terminal-platform",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r --parallel --filter @terminal-platform/web --filter @terminal-platform/terminal-server dev",
+    "postinstall": "node ./scripts/fix-node-pty-helper.mjs",
+    "test": "pnpm -r test",
+    "test:coverage": "pnpm -r test:coverage",
+    "check": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^3.2.4",
+    "@types/node": "^22.13.10",
+    "jsdom": "^26.0.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  }
+}

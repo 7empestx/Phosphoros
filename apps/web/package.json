@@ -1,0 +1,21 @@
+{
+  "name": "@terminal-platform/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@terminal-platform/client": "workspace:*",
+    "ghostty-web": "^0.4.0"
+  },
+  "devDependencies": {
+    "vite": "^6.4.1"
+  }
+}

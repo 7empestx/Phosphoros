@@ -1,0 +1,21 @@
+node_modules
+dist
+.DS_Store
+coverage
+.turbo
+pnpm-lock.yaml
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code
+.claude/

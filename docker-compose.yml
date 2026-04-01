@@ -1,0 +1,62 @@
+services:
+  workspace-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    command: sh -lc "pnpm install"
+    volumes:
+      - .:/workspace
+      - node_modules:/workspace/node_modules
+      - pnpm-store:/pnpm/store
+
+  terminal-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      workspace-init:
+        condition: service_completed_successfully
+    working_dir: /workspace
+    command: sh -lc "pnpm --filter @terminal-platform/terminal-server dev"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8787
+      AUTH_TOKEN: dev-token
+      SHELL_PATH: /bin/zsh
+      ALLOWED_SHELL_PATHS: /bin/zsh,/bin/bash
+      WORKDIR: /workspace
+      ALLOWED_WORKDIRS: /workspace
+      REPLAY_BUFFER_BYTES: 2097152
+      IDLE_TTL_MS: 1800000
+    ports:
+      - "8787:8787"
+    volumes:
+      - .:/workspace
+      - node_modules:/workspace/node_modules
+      - pnpm-store:/pnpm/store
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      workspace-init:
+        condition: service_completed_successfully
+      terminal-server:
+        condition: service_started
+    working_dir: /workspace
+    command: sh -lc "pnpm --filter @terminal-platform/web dev"
+    environment:
+      VITE_TERMINAL_WS_URL: ws://localhost:8787/ws
+      VITE_TERMINAL_AUTH_TOKEN: dev-token
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/workspace
+      - node_modules:/workspace/node_modules
+      - pnpm-store:/pnpm/store
+
+volumes:
+  node_modules:
+  pnpm-store:
