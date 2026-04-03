@@ -137,6 +137,7 @@ describe("TerminalSession", () => {
   it("handles transport exit when tmux is gone and swallow kill errors", async () => {
     execFileAsync
       .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({})
       .mockRejectedValueOnce(new Error("gone"))
       .mockRejectedValueOnce(new Error("gone"));
 
@@ -199,6 +200,20 @@ describe("TerminalSession", () => {
       "-t",
       "terminal-idle-timeout",
     ]);
+  });
+
+
+
+  it("preserves raw tmux session names when attaching by tmux-prefixed session id", () => {
+    const session = new TerminalSession("tmux:shared", config(), {
+      execFileAsync,
+      spawnPty: spawnPty as never,
+      now: () => now,
+      setTimeoutImpl: setTimeoutImpl as never,
+      clearTimeoutImpl: clearTimeoutImpl as never,
+    });
+
+    expect(session.getTmuxSessionName()).toBe("shared");
   });
 
   it("handles default deps, clean closes, and non-expired sessions", async () => {

@@ -23,7 +23,7 @@ export interface ServerConfig {
   authToken: string;
 }
 
-const DEFAULT_WORKDIR = path.resolve(process.cwd());
+const DEFAULT_WORKDIR = process.env.HOME ?? path.resolve(process.cwd());
 
 export function loadConfig(env = process.env): ServerConfig {
   const shellPath = env.SHELL_PATH ?? "/bin/zsh";

@@ -72,6 +72,21 @@ describe("server helpers", () => {
 });
 
 describe("createTerminalServer", () => {
+
+  it("returns an empty session list when session enumeration fails", async () => {
+    const response = fakeResponse();
+    const handler = (await import("../src/http.js")).createHttpRequestHandler(config(), {
+      listAvailableSessions: vi.fn().mockRejectedValue("boom"),
+    } as never);
+
+    handler({ url: "/sessions", method: "GET" } as never, response as never);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(response.writeHead).toHaveBeenCalledWith(200, {
+      "content-type": "application/json",
+    });
+    expect(response.end).toHaveBeenCalledWith(JSON.stringify({ sessions: [] }));
+  });
   let requestHandler: ((req: { url?: string }, res: any) => void) | undefined;
   const upgradeHandlers: Array<(request: any, socket: any, head: any) => void> = [];
   let connectionHandler: ((socket: any) => void) | undefined;
@@ -80,6 +95,23 @@ describe("createTerminalServer", () => {
     upgradeHandlers.length = 0;
     connectionHandler = undefined;
     vi.restoreAllMocks();
+  });
+
+
+
+  it("returns an empty session list when session enumeration throws an error object", async () => {
+    const response = fakeResponse();
+    const handler = (await import("../src/http.js")).createHttpRequestHandler(config(), {
+      listAvailableSessions: vi.fn().mockRejectedValue(new Error("boom")),
+    } as never);
+
+    handler({ url: "/sessions", method: "GET" } as never, response as never);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(response.writeHead).toHaveBeenCalledWith(200, {
+      "content-type": "application/json",
+    });
+    expect(response.end).toHaveBeenCalledWith(JSON.stringify({ sessions: [] }));
   });
 
   it("serves health checks, handles websocket flow, and shuts down", async () => {

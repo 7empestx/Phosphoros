@@ -129,6 +129,17 @@ describe("SessionManager", () => {
       cols: 81,
       rows: 25,
     });
+    expect(manager.listSessions()).toEqual([
+      {
+        type: "session_status",
+        sessionId: "session-1",
+        cols: 80,
+        rows: 24,
+        connected: true,
+        durable: true,
+        idleExpiresAt: null,
+      },
+    ]);
     expect(await manager.listAvailableSessions()).toEqual([
       {
         sessionId: "session-1",
@@ -191,16 +202,6 @@ describe("SessionManager", () => {
         source: "tmux",
       },
       {
-        sessionId: "session-1",
-        tmuxSessionName: "terminal-session-1",
-        cols: 80,
-        rows: 24,
-        connected: true,
-        durable: true,
-        idleExpiresAt: null,
-        source: "memory",
-      },
-      {
         sessionId: "tmux:shared",
         tmuxSessionName: "shared",
         cols: null,
@@ -210,13 +211,33 @@ describe("SessionManager", () => {
         idleExpiresAt: null,
         source: "tmux",
       },
+      {
+        sessionId: "session-1",
+        tmuxSessionName: "terminal-session-1",
+        cols: 80,
+        rows: 24,
+        connected: true,
+        durable: true,
+        idleExpiresAt: null,
+        source: "memory",
+      },
     ]);
+  });
+
+
+
+  it("uses the default tmux enumerator and exposes in-memory session snapshots", async () => {
+    const { SessionManager } = await import("../src/session/SessionManager.js");
+    const manager = new SessionManager(config());
+
+    expect(manager.listSessions()).toEqual([]);
+    await expect(manager.listAvailableSessions()).resolves.toEqual(expect.any(Array));
   });
 
   it("falls back to memory sessions when tmux enumeration fails", async () => {
     const { SessionManager } = await import("../src/session/SessionManager.js");
     const manager = new SessionManager(config(), {
-      execFileAsync: vi.fn().mockRejectedValue(new Error("tmux down")),
+      execFileAsync: vi.fn().mockRejectedValue("tmux down"),
     });
     const socket = fakeSocket();
     sessionState.attach.mockResolvedValue({ snapshot: Buffer.alloc(0) });

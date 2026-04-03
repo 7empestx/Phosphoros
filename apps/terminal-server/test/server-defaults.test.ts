@@ -3,6 +3,31 @@ import { describe, expect, it, vi } from "vitest";
 import type { ServerConfig } from "../src/config.js";
 
 describe("server default dependencies", () => {
+
+  it("uses the default session manager execFile wrapper when tmux enumeration fails", async () => {
+    vi.resetModules();
+
+    const execFile = vi.fn((file: string, args: string[], callback: (...data: any[]) => void) => {
+      callback(new Error("tmux unavailable"), "", "");
+    });
+
+    vi.doMock("node:child_process", () => ({
+      execFile,
+    }));
+    vi.doMock("node-pty", () => ({
+      spawn: vi.fn(),
+    }));
+
+    const { SessionManager } = await import("../src/session/SessionManager.js");
+    const manager = new SessionManager(config());
+
+    await expect(manager.listAvailableSessions()).resolves.toEqual([]);
+    expect(execFile).toHaveBeenCalledWith(
+      "/opt/homebrew/bin/tmux",
+      ["list-sessions", "-F", "#{session_name}"],
+      expect.any(Function),
+    );
+  });
   it("uses built-in defaults when deps are omitted", async () => {
     vi.resetModules();
 

@@ -16,6 +16,7 @@ const animationFrames = new Map<number, FrameRequestCallback>();
 const timeouts = new Map<number, () => void>();
 let nextFrameId = 0;
 let nextTimeoutId = 0;
+let storage: Storage;
 
 function okFetch(payload: unknown) {
   return vi.fn().mockResolvedValue({
@@ -117,7 +118,7 @@ vi.mock("@terminal-platform/client", () => ({
 describe("web app", () => {
   beforeEach(() => {
     document.body.innerHTML = "<div id=\"app\"></div>";
-    window.localStorage.clear();
+    storage = createStorage();
     animationFrames.clear();
     timeouts.clear();
     nextFrameId = 0;
@@ -167,7 +168,7 @@ describe("web app", () => {
     await mountTerminalApp({
       document,
       location: window.location,
-      window.localStorage,
+      localStorage: storage,
       crypto: { randomUUID: () => "session-1" } as Crypto,
       fetch: okFetch({ sessions: [] }) as never,
       ResizeObserver: FakeResizeObserver as never,
@@ -248,8 +249,11 @@ describe("web app", () => {
       { sessionId: "session-1" },
     );
 
+    document.querySelector<HTMLButtonElement>("#attach-session")?.click();
+    expect(reload).not.toHaveBeenCalled();
+
     document.querySelector<HTMLButtonElement>("#reset-session")?.click();
-    expect(window.localStorage.getItem("terminal-platform.session-id")).toBeNull();
+    expect(storage.getItem("terminal-platform.session-id")).toBeNull();
     expect(reload).toHaveBeenCalled();
     expect(console.info).toHaveBeenCalledWith(
       "[browser-terminal] Resetting browser terminal session",
@@ -258,7 +262,7 @@ describe("web app", () => {
   });
 
   it("reuses the stored session id across reloads", async () => {
-    window.localStorage.setItem("terminal-platform.session-id", "existing-session");
+    storage.setItem("terminal-platform.session-id", "existing-session");
     Object.defineProperty(window, "location", {
       value: { protocol: "http:", hostname: "localhost", reload: vi.fn() },
       configurable: true,
@@ -276,7 +280,7 @@ describe("web app", () => {
     await mountTerminalApp({
       document,
       location: window.location,
-      window.localStorage,
+      localStorage: storage,
       crypto: { randomUUID: () => "unused-session" } as Crypto,
       fetch: okFetch({
         sessions: [
@@ -373,7 +377,7 @@ describe("web app", () => {
     await mountTerminalApp({
       document,
       location: window.location,
-      window.localStorage,
+      localStorage: storage,
       crypto: { randomUUID: () => "session-2" } as Crypto,
       fetch: okFetch({ sessions: [] }) as never,
       ResizeObserver: FakeResizeObserver as never,
@@ -433,7 +437,7 @@ describe("web app", () => {
     await mountTerminalApp({
       document,
       location: window.location,
-      window.localStorage,
+      localStorage: storage,
       crypto: { randomUUID: () => "session-3" } as Crypto,
       fetch: okFetch({ sessions: [] }) as never,
       ResizeObserver: FakeResizeObserver as never,
@@ -480,16 +484,16 @@ describe("web app", () => {
     expect(statusText.textContent).toBe("Done");
     expect(statusDot.dataset.state).toBe("idle");
 
-    window.localStorage.setItem(module.SESSION_STORAGE_KEY, "existing");
-    expect(module.getOrCreateSessionId(window.localStorage, crypto)).toBe("existing");
-    window.localStorage.removeItem(module.SESSION_STORAGE_KEY);
+    storage.setItem(module.SESSION_STORAGE_KEY, "existing");
+    expect(module.getOrCreateSessionId(storage, crypto)).toBe("existing");
+    storage.removeItem(module.SESSION_STORAGE_KEY);
     expect(
-      module.getOrCreateSessionId(window.localStorage, { randomUUID: () => "generated-session" } as Crypto),
+      module.getOrCreateSessionId(storage, { randomUUID: () => "generated-session" } as Crypto),
     ).toBe("generated-session");
     expect(
-      module.createFreshSessionId(window.localStorage, { randomUUID: () => "fresh-session" } as Crypto),
+      module.createFreshSessionId(storage, { randomUUID: () => "fresh-session" } as Crypto),
     ).toBe("fresh-session");
-    expect(window.localStorage.getItem(module.SESSION_STORAGE_KEY)).toBe("fresh-session");
+    expect(storage.getItem(module.SESSION_STORAGE_KEY)).toBe("fresh-session");
     expect(module.toWebSocketUrl(new URL("https://example.com") as never, 8787, "/ws")).toBe(
       "wss://example.com:8787/ws",
     );
@@ -535,26 +539,31 @@ describe("web app", () => {
       [
         {
           sessionId: "alpha-session",
+          tmuxSessionName: "terminal-alpha-session",
           cols: 80,
           rows: 24,
           connected: true,
           durable: true,
           idleExpiresAt: null,
+          source: "memory",
         },
         {
-          sessionId: "beta-session",
-          cols: 100,
-          rows: 30,
+          sessionId: "tmux:beta-session",
+          tmuxSessionName: "beta-session",
+          cols: null,
+          rows: null,
           connected: false,
           durable: true,
           idleExpiresAt: null,
+          source: "tmux",
         },
       ],
-      "alpha-session",
+      "current-session",
     );
     expect(select.options).toHaveLength(3);
-    expect(select.value).toBe("alpha-session");
-    expect(select.options[2]?.textContent).toContain("beta-ses");
+    expect(select.value).toBe("current-session");
+    expect(select.options[1]?.textContent).toContain("terminal-alpha-session · 80x24 · attached");
+    expect(select.options[2]?.textContent).toContain("beta-session · tmux");
     module.handleBinaryFrame(writer, {
       kind: "snapshot",
       data: new Uint8Array([66]),
@@ -641,7 +650,7 @@ describe("web app", () => {
           hostname: "localhost",
           reload: vi.fn(),
         } as unknown as Location,
-        window.localStorage,
+        localStorage: storage,
         crypto,
         fetch: vi.fn().mockResolvedValue({
           ok: false,
@@ -690,6 +699,11 @@ describe("web app", () => {
     const fetch = vi
       .fn()
       .mockRejectedValueOnce(new Error("network down"))
+      .mockRejectedValueOnce("network string down")
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+      })
       .mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -713,7 +727,7 @@ describe("web app", () => {
     await mountTerminalApp({
       document,
       location: window.location,
-      window.localStorage,
+      localStorage: storage,
       crypto: { randomUUID: () => "session-a" } as Crypto,
       fetch: fetch as never,
       ResizeObserver: FakeResizeObserver as never,
@@ -744,7 +758,67 @@ describe("web app", () => {
     await mountTerminalApp({
       document,
       location: window.location,
-      window.localStorage,
+      localStorage: storage,
+      crypto: { randomUUID: () => "session-a" } as Crypto,
+      fetch: fetch as never,
+      ResizeObserver: FakeResizeObserver as never,
+      requestAnimationFrame: ((callback: FrameRequestCallback) => {
+        nextFrameId += 1;
+        animationFrames.set(nextFrameId, callback);
+        return nextFrameId;
+      }) as never,
+      cancelAnimationFrame: ((id: number) => {
+        animationFrames.delete(id);
+      }) as never,
+      setTimeout: ((callback: () => void) => {
+        nextTimeoutId += 1;
+        timeouts.set(nextTimeoutId, callback);
+        return nextTimeoutId;
+      }) as never,
+      clearTimeout: ((id: number) => {
+        timeouts.delete(id);
+      }) as never,
+    });
+    await Promise.resolve();
+    expect(console.error).toHaveBeenCalledWith(
+      "[browser-terminal] Failed to hydrate browser terminal sessions",
+      { error: "network string down" },
+    );
+
+    await mountTerminalApp({
+      document,
+      location: window.location,
+      localStorage: storage,
+      crypto: { randomUUID: () => "session-a" } as Crypto,
+      fetch: fetch as never,
+      ResizeObserver: FakeResizeObserver as never,
+      requestAnimationFrame: ((callback: FrameRequestCallback) => {
+        nextFrameId += 1;
+        animationFrames.set(nextFrameId, callback);
+        return nextFrameId;
+      }) as never,
+      cancelAnimationFrame: ((id: number) => {
+        animationFrames.delete(id);
+      }) as never,
+      setTimeout: ((callback: () => void) => {
+        nextTimeoutId += 1;
+        timeouts.set(nextTimeoutId, callback);
+        return nextTimeoutId;
+      }) as never,
+      clearTimeout: ((id: number) => {
+        timeouts.delete(id);
+      }) as never,
+    });
+    await Promise.resolve();
+    expect(console.warn).toHaveBeenCalledWith(
+      "[browser-terminal] Failed to fetch browser terminal sessions",
+      { status: "503" },
+    );
+
+    await mountTerminalApp({
+      document,
+      location: window.location,
+      localStorage: storage,
       crypto: { randomUUID: () => "session-a" } as Crypto,
       fetch: fetch as never,
       ResizeObserver: FakeResizeObserver as never,
@@ -770,7 +844,7 @@ describe("web app", () => {
     const selectEl = document.querySelector<HTMLSelectElement>("#session-select");
     selectEl!.value = "tmux:session-b";
     document.querySelector<HTMLButtonElement>("#attach-session")?.click();
-    expect(window.localStorage.getItem("terminal-platform.session-id")).toBe("tmux:session-b");
+    expect(storage.getItem("terminal-platform.session-id")).toBe("tmux:session-b");
     expect(reload).toHaveBeenCalled();
   });
 });
@@ -793,4 +867,28 @@ function flushAllTimeouts(): void {
       callback();
     }
   }
+}
+
+function createStorage(): Storage {
+  const values = new Map<string, string>();
+  return {
+    get length() {
+      return values.size;
+    },
+    clear() {
+      values.clear();
+    },
+    getItem(key: string) {
+      return values.has(key) ? values.get(key) ?? null : null;
+    },
+    key(index: number) {
+      return Array.from(values.keys())[index] ?? null;
+    },
+    removeItem(key: string) {
+      values.delete(key);
+    },
+    setItem(key: string, value: string) {
+      values.set(key, value);
+    },
+  };
 }

@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@terminal-platform/client": "workspace:*",
-    "ghostty-web": "^0.4.0"
+    "ghostty-web": "link:/Users/admin/Mine/ghostty-web"
   },
   "devDependencies": {
     "vite": "^6.4.1"

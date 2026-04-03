@@ -230,6 +230,15 @@ export class TerminalSession {
         ...this.config.shellArgs,
       ]);
     }
+
+    // Enable passthrough so Kitty graphics APC sequences reach the client
+    await this.deps.execFileAsync(this.config.tmuxPath, [
+      "set-option",
+      "-t",
+      this.tmuxSessionName,
+      "allow-passthrough",
+      "all",
+    ]);
   }
 
   private spawnTransport(cols: number, rows: number): IPty {

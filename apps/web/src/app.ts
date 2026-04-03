@@ -1,6 +1,6 @@
 import { TerminalConnection } from "@terminal-platform/client";
 import type { BinaryFrame, ServerMessage } from "@terminal-platform/protocol";
-import { FitAddon, Terminal, init } from "ghostty-web";
+import { FitAddon, KittyGraphicsAddon, Terminal, init } from "ghostty-web";
 import ghosttyWasmUrl from "ghostty-web/ghostty-vt.wasm?url";
 
 export const SESSION_STORAGE_KEY = "terminal-platform.session-id";
@@ -215,6 +215,7 @@ export async function mountTerminalApp(runtime: BrowserRuntime = window): Promis
 
   const terminal = new Terminal({
     fontSize: 14,
+    fontFamily: '"Hack Nerd Font Mono", monospace',
     cursorBlink: true,
     theme: {
       background: "#08131f",
@@ -225,7 +226,13 @@ export async function mountTerminalApp(runtime: BrowserRuntime = window): Promis
   terminal.open(terminalMount);
   const fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
-  const bufferedWriter = new TerminalWriteBuffer(terminal, runtime);
+
+  // Kitty Graphics Protocol support — intercepts image sequences from PTY output
+  // Suppress responses to avoid them being sent as PTY input through the WebSocket
+  const kittyGraphics = new KittyGraphicsAddon({ sendResponse: () => {} });
+  terminal.loadAddon(kittyGraphics);
+
+  const bufferedWriter = new TerminalWriteBuffer(terminal, runtime, kittyGraphics);
   const initDimensions = getTerminalDimensions(fitAddon, terminalMount);
   const { cols: initCols, rows: initRows } = initDimensions;
   terminal.resize(initCols, initRows);
@@ -260,6 +267,7 @@ export async function mountTerminalApp(runtime: BrowserRuntime = window): Promis
   terminal.onData((data) => {
     connection.sendInput(data);
   });
+
 
   resetButton.addEventListener("click", () => {
     logBrowserEvent("info", "Resetting browser terminal session", { sessionId });
@@ -451,6 +459,7 @@ export class TerminalWriteBuffer implements TerminalWriter {
   private readonly terminal: Terminal;
   private readonly requestAnimationFrameImpl: typeof requestAnimationFrame;
   private readonly cancelAnimationFrameImpl: typeof cancelAnimationFrame;
+  private readonly graphicsAddon: KittyGraphicsAddon | null;
   private queue = "";
   private queuedBytes = 0;
   private scheduledFrame: number | null = null;
@@ -460,15 +469,23 @@ export class TerminalWriteBuffer implements TerminalWriter {
   constructor(
     terminal: Terminal,
     runtime: Pick<BrowserRuntime, "requestAnimationFrame" | "cancelAnimationFrame">,
+    graphicsAddon?: KittyGraphicsAddon,
   ) {
     this.terminal = terminal;
     this.requestAnimationFrameImpl = runtime.requestAnimationFrame.bind(runtime);
     this.cancelAnimationFrameImpl = runtime.cancelAnimationFrame.bind(runtime);
+    this.graphicsAddon = graphicsAddon ?? null;
   }
 
   write(data: string): void {
     if (!data) {
       return;
+    }
+
+    // Strip Kitty graphics APC sequences before terminal gets the data
+    if (this.graphicsAddon) {
+      data = this.graphicsAddon.processOutput(data);
+      if (!data) return;
     }
 
     const bytes = textEncoder.encode(data).length;
